@@ -1,43 +1,70 @@
 import streamlit as st
+import pandas as pd
+import datetime as dt
+import matplotlib.pyplot as plt
+import numpy as np
+import plotly.graph_objects as go
+from PIL import Image
 
 st.set_page_config(page_title="Trade Recommendations", layout="wide")
-st.title("Daily Trade Recommendations")
+st.title("Daily Trade Recommendations - "+str(dt.datetime.today().date()))
 
-# Create the tabs
-tab_recommendations, tab_ttf, tab_hh, tab_wti, tab_brent = st.tabs([
-    "Recommendations", "TTF", "HH", "WTI", "BRENT"
+img = Image.open("tradeclasses.png")
+
+@st.cache_data
+def load_recs(path="data/trade_recs.csv"):
+    return pd.read_csv(path)
+
+df = load_recs("data/trade_recs.csv").drop('RECOMMENDATION_DATE', axis=1)
+df = df.reset_index(drop=True)
+
+# define tabs
+tab_recs, tab_ttf, tab_hh, tab_wti, tab_brent = st.tabs([
+    "Overview",
+    "TTF",
+    "HH",
+    "WTI",
+    "BRENT"
 ])
 
-# Contents tab
-with tab_recommendations:
-    st.header("Recommendations")
-    st.markdown("""
-    1. [TTF (Title)](#)
-    2. [HH (Title)](#)
-    3. [WTI (Title)](#)
-    4. [Brent (Title)](#)
-    """)
+# Overview tab
+with tab_recs:
+    st.header("Overview")
+    st.dataframe(df, use_container_width=True)
+
+    st.subheader("Trade Class Visualization")
+    spacer1, content_col, spacer2 = st.columns([1, 4, 1], vertical_alignment="center")
+
+    with content_col:
+       
+        col_img, col_tex = st.columns([1, 1], vertical_alignment="center")
+        with col_img:
+            st.image(img, use_container_width=True)
+        with col_tex:
+            st.latex(r"""
+                \theta = \arctan\frac{\mathrm{vol}}{\mathrm{price}} \\[8pt]
+                r = \sqrt{\mathrm{price}^2 + \mathrm{vol}^2}
+            """)
+    
+    
 
 # TTF tab
 with tab_ttf:
     st.header("TTF")
-    st.write("Place your TTF price & IV charts here")
-    # e.g. st.plotly_chart(your_ttf_figure)
+    st.write("… your TTF charts …")
 
 # HH tab
 with tab_hh:
     st.header("HH")
-    st.write("Place your HH price & IV charts here")
-    # e.g. st.plotly_chart(your_hh_figure)
+    st.write("… your HH charts …")
 
 # WTI tab
 with tab_wti:
     st.header("WTI")
-    st.write("Place your WTI price & IV charts here")
-    # e.g. st.plotly_chart(your_wti_figure)
+    st.write("… your WTI charts …")
 
 # Brent tab
 with tab_brent:
-    st.header("BRENT")
-    st.write("Place your Brent price & IV charts here")
-    # e.g. st.plotly_chart(your_brent_figure)
+    st.header("Brent")
+    st.write("… your Brent charts …")
+
