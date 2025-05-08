@@ -6,20 +6,51 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+import re
 from PIL import Image
+from utils.utils import *
+
+# TODO:
+# - get real data
+# - fix dodgy IV syndata
+# - strike lines
 
 st.set_page_config(page_title="Trade Recommendations", layout="wide")
 st.title("Daily Trade Recommendations - "+str(dt.datetime.today().date()))
 
-img = Image.open("tradeclasses.png")
-
-# Recommendation data
 @st.cache_data
-def load_recs(path="data/trade_recs.csv"):
-    return pd.read_csv(path)
+def load_and_prepare(path):
+    raw = pd.read_csv(path, parse_dates=["RECOMMENDATION_DATE"])
+    return transform_recs(raw)
 
-df = load_recs("data/trade_recs.csv").drop('RECOMMENDATION_DATE', axis=1)
+df = load_and_prepare("data/trade_recs.csv")
 df = df.reset_index(drop=True)
+
+# main content function
+def render_contract_subtabs(product_prefix):
+    ctrs = [c for c in df["Contract"].unique() if c.startswith(product_prefix)]
+    if not ctrs:
+        st.write(f"No recommendations for {product_prefix}")
+        return
+
+    sub_tabs = st.tabs(ctrs)
+    for contract, sub in zip(ctrs, sub_tabs):
+        with sub:
+            st.header(contract)
+            df_c = df[df["Contract"] == contract]
+            st.dataframe(df_c.drop(columns=["Contract"]), use_container_width=True)
+
+            st.header("Price")
+            st.plotly_chart(price_figure(contract), use_container_width=True)
+            st.write("(*Move tabs on edges of bottom subplot to change date range)")
+
+            st.header("ATM Volatility")
+            # st.plotly_chart(ttf_vol_figure(hist_vol, fc_vol), use_container_width=True)
+
+            st.header("IV Smile Evolution")
+            st.plotly_chart(iv_smile_fig(contract), use_container_width=True)
+
+
 
 @st.cache_data
 def make_ttf_data():
@@ -67,7 +98,7 @@ def make_iv_smile_forecast():
     today = dt.datetime.today().date()
     # next 30 business days
     dates = pd.date_range(start=today + pd.Timedelta(days=1), periods=30)
-    moneyness = np.arange(0.6, 1.4, 0.01) 
+    moneyness = np.arange(0.6, 1.41, 0.01) 
 
     records = []
     for i, date in enumerate(dates):
@@ -82,8 +113,10 @@ def make_iv_smile_forecast():
 
     return pd.DataFrame(records)
 
-def ttf_figure(ohlc, fc):
-    # fig = make_subplots(specs=[[{"secondary_y": False}]])
+def price_figure(contract):
+    ticker = contract_to_ticker(contract)
+    ohlc = pd.read_csv(f"data/{ticker}_ohlc.csv").set_index('date')
+    fc = pd.read_csv(f"data/{ticker}_fc.csv").set_index('date')
     fig = go.Figure()
     # Candlestick
     fig.add_trace(go.Candlestick(
@@ -102,11 +135,11 @@ def ttf_figure(ohlc, fc):
             name=f"FC {col.upper()}"
         ))
     fig.update_layout(
-        title="TTF: Historical OHLC + VAR Price Forecasts",
+        title=f"{contract}: Historical OHLC + VAR Price Forecasts",
         xaxis=dict(color="white"), yaxis=dict(color="white"),
-        plot_bgcolor="black", paper_bgcolor="black",
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", y=1.02),
-        font=dict(color="white"),
+        font=dict(color="gray"),
         margin=dict(t=50, b=30, l=30, r=30)
     )
     return fig
@@ -117,7 +150,7 @@ def ttf_vol_figure(hist, fc):
     fig.add_trace(go.Scatter(
         x=hist.index, y=hist["vol"],
         mode="lines", name="History",
-        line=dict(color="yellow", width=2)
+        line=dict(color="orange", width=2)
     ))
     # Single forecast
     fig.add_trace(go.Scatter(
@@ -129,39 +162,74 @@ def ttf_vol_figure(hist, fc):
         title="TTF: ATM Volatility & Forecast",
         xaxis_title="Date",
         yaxis_title="Volatility (%)",
-        plot_bgcolor="black",
-        paper_bgcolor="black",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="white"),
         legend=dict(orientation="h", y=1.02),
         margin=dict(t=50, b=30, l=30, r=30)
     )
     return fig
 
-def iv_smile_fig(df_smile):
-    fig = px.line(
-        df_smile,
-        x="moneyness", y="iv",
-        animation_frame="date",
-        range_y=[df_smile.iv.min() - 1, df_smile.iv.max() + 1],
-        labels={"moneyness": "Moneyness", "iv": "IV (%)"},
-        title="TTF: Implied Volatility Forecast"
+# def iv_smile_fig(contract):
+#     ticker = contract_to_ticker(contract)
+#     df_smile = pd.read_csv(f"data/{ticker}_IVfc.csv").set_index('date')
+#     fig = px.line(
+#         df_smile,
+#         x="moneyness", y="iv",
+#         animation_frame="date",
+#         range_y=[df_smile.iv.min() - 1, df_smile.iv.max() + 1],
+#         labels={"moneyness": "Moneyness", "iv": "IV (%)"},
+#         title=f"{contract}: Implied Volatility Forecast"
+#     )
+#     fig.update_traces(line=dict(width=2))
+#     fig.update_layout(
+#         plot_bgcolor="rgba(0,0,0,0)",
+#         paper_bgcolor="rgba(0,0,0,0)",
+#         font=dict(color="gray"),
+#         sliders=dict(transition=dict(duration=300)),
+#         margin=dict(l=40, r=20, t=60, b=40),
+#     )
+#     fig.update_xaxes(showgrid=False, color="gray")
+#     fig.update_yaxes(showgrid=True, gridcolor="gray", color="gray")
+#     return fig
+
+def iv_smile_fig(contract):
+    ticker = contract_to_ticker(contract)
+    # Read wide DataFrame (date index, each moneyness as a column)
+    df_wide = (
+        pd.read_csv(f"data/{ticker}_IVfc.csv", index_col="date")
+        .sort_index()
     )
-    fig.update_traces(line=dict(color="cyan", width=2))
+
+    # Melt back to long form: one row per (date, moneyness)
+    df_long = (
+        df_wide
+        .reset_index()
+        .melt(id_vars="date", var_name="moneyness", value_name="iv")
+    )
+    df_long["moneyness"] = df_long["moneyness"].astype(float)
+
+    fig = px.line(
+        df_long,
+        x="moneyness",
+        y="iv",
+        animation_frame="date",
+        range_y=[df_long.iv.min() - 1, df_long.iv.max() + 1],
+        labels={"moneyness": "Moneyness", "iv": "IV (%)"},
+        title=f"{contract}: Implied Volatility Forecast"
+    )
+    fig.update_traces(line=dict(width=2))
     fig.update_layout(
-        plot_bgcolor="black",
-        paper_bgcolor="black",
-        font=dict(color="white"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="gray"),
         sliders=dict(transition=dict(duration=300)),
         margin=dict(l=40, r=20, t=60, b=40),
     )
-    fig.update_xaxes(showgrid=False, color="white")
-    fig.update_yaxes(showgrid=True, gridcolor="gray", color="white")
+    fig.update_xaxes(showgrid=False, color="gray")
+    fig.update_yaxes(showgrid=True, gridcolor="gray", color="gray")
     return fig
 
-ohlc, fc = make_ttf_data()
-hist_vol, fc_vol = make_ttf_vol_data()
-df_smile = make_iv_smile_forecast()
-fig_smile = iv_smile_fig(df_smile)
 
 # define tabs
 tab_recs, tab_ttf, tab_hh, tab_wti, tab_brent = st.tabs([
@@ -176,7 +244,7 @@ tab_recs, tab_ttf, tab_hh, tab_wti, tab_brent = st.tabs([
 with tab_recs:
     st.header("Overview")
     st.dataframe(df, use_container_width=True)
-
+    st.write('(*Bid/offer prices are combined for composite positions, e.g. risk reversals)')
     st.subheader("Trade Class Visualization")
     spacer1, content_col, spacer2 = st.columns([1, 4, 1], vertical_alignment="center")
 
@@ -184,6 +252,7 @@ with tab_recs:
        
         col_img, col_tex = st.columns([1, 1], vertical_alignment="center")
         with col_img:
+            img = Image.open("tradeclasses.png")
             st.image(img, use_container_width=True)
         with col_tex:
             st.latex(r"""
@@ -199,33 +268,30 @@ with tab_recs:
 
 # TTF tab
 with tab_ttf:
-    ohlc, fc = make_ttf_data()
+    # ohlc, fc = make_ttf_data()
     hist_vol, fc_vol = make_ttf_vol_data()
-    df_smile = make_iv_smile_forecast()
-    fig_smile = iv_smile_fig(df_smile)
+    # df_smile = make_iv_smile_forecast()
+    # fig_smile = iv_smile_fig(df_smile)
 
     st.header("Price")
-    st.plotly_chart(ttf_figure(ohlc, fc), use_container_width=True)
-    st.write("(^Move tabs on edge of bottom subplot to change date range)")
+    # st.plotly_chart(price_figure(ohlc, fc), use_container_width=True)
+    st.write("(*Move tabs on edges of bottom subplot to change date range)")
 
     st.header("ATM Volatility")
     st.plotly_chart(ttf_vol_figure(hist_vol, fc_vol), use_container_width=True)
 
-    st.header("IV Smile Evolution")
-    st.plotly_chart(fig_smile, use_container_width=True)
+    # st.header("IV Smile Evolution")
+    # st.plotly_chart(fig_smile, use_container_width=True)
 
 # HH tab
 with tab_hh:
-    st.header("HH")
-    st.write("… your HH charts …")
+    render_contract_subtabs("HH")
 
 # WTI tab
 with tab_wti:
-    st.header("WTI")
-    st.write("… your WTI charts …")
+    render_contract_subtabs("WTI")
 
 # Brent tab
 with tab_brent:
-    st.header("Brent")
-    st.write("… your Brent charts …")
+    render_contract_subtabs("BRENT")
 
