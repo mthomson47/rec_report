@@ -146,7 +146,7 @@ def vol_figure(contract):
     )
     return fig
 
-@st.cache_datas
+@st.cache_data
 def iv_smile_fig(contract):
     ticker = contract_to_ticker(contract)
     # Read wide DataFrame (date index, each moneyness as a column)
