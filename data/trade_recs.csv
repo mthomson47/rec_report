@@ -5,8 +5,8 @@ RECOMMENDATION_DATE,ID,QUOTE,STRIKE,PUT_CALL,LONG_SHORT,REGION
 2025-05-06T00:00,16568,"HH Sep-25 Short Put strike 3,30; delta X 3,95; fair value 0,22; best offer 0,22",3.3,P,-1,HH
 2025-05-06T00:00,16569,"HH Oct-25 Short Put strike 3,40; delta X 4,02; fair value 0,29; best offer 0,29",3.4,P,-1,HH
 2025-05-06T00:00,16567,"HH Nov-25 Short Put strike 3,60; delta X 4,37; fair value 0,30; best offer 0,29",3.6,P,-1,HH
-2025-05-06T00:00,16565,"TTF Oct-25 Long Risk Reversal (Long Call Short Put) strike C/P 46,00/28,50; delta X 33,87; fair value 0,41; best bid 0,75",28.5,P,1,TTF
-2025-05-06T00:00,16564,"TTF Oct-25 Long Risk Reversal (Long Call Short Put) strike C/P 46,00/28,50; delta X 33,87; fair value 0,41; best bid 0,75",46,C,-1,TTF
+2025-05-06T00:00,16565,"TTF Oct-25 Long Risk Reversal (Long Call Short Put) strike C/P 46,00/28,50; delta X 33,87; fair value 0,41; best bid 0,75",28.5,P,-1,TTF
+2025-05-06T00:00,16564,"TTF Oct-25 Long Risk Reversal (Long Call Short Put) strike C/P 46,00/28,50; delta X 33,87; fair value 0,41; best bid 0,75",46,C,1,TTF
 2025-05-06T00:00,16566,"TTF Nov-25 Short Put strike 29,00; delta X 34,44; fair value 2,32; best offer 2,32",29,P,-1,TTF
 2025-05-06T00:00,16561,"WTI Aug-25 Long Put strike 56,50; delta X 56,46; fair value 3,90; best bid 4,39",56.5,P,1,WTI
 2025-05-06T00:00,16560,"WTI Sep-25 Long Put strike 49,50; delta X 56,24; fair value 2,06; best bid 2,34",49.5,P,1,WTI
