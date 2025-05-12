@@ -1,6 +1,7 @@
 import re
 import pandas as pd
 import streamlit as st
+import datetime as dt
 
 MONTH_TO_CODE = {
     "JAN": "F", "FEB": "G", "MAR": "H", "APR": "J",
@@ -68,7 +69,8 @@ def transform_recs(df: pd.DataFrame) -> pd.DataFrame:
         'Best Bid':  best_bids,
         'Best Offer':best_offers,
         'Put/Call':  df['PUT_CALL'],
-        'Long/Short':df['LONG_SHORT']
+        'Long/Short':df['LONG_SHORT'],
+        'Expiry':    [pd.to_datetime(date).date() for date in df['EXPIRY']]
     })
 
     return result.reset_index(drop=True)

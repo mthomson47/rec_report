@@ -48,7 +48,7 @@ def render_contract_subtabs(product_prefix):
             st.header("ATM Volatility")
             st.plotly_chart(vol_figure(contract), use_container_width=True)
 
-            st.header("IV Smile Evolution")
+            st.header("IV Smile")
             st.plotly_chart(iv_smile_fig(contract), use_container_width=True)
 
 # plotting functions
@@ -67,7 +67,12 @@ def price_figure(contract):
         name="History"
     ))
     # Forecast lines
-    colors = {"nc":"#FF6600","c":"cyan","ct":"magenta","ctt":"#B8860B"}
+    colors = {
+        "nc":  "#444444",   # darkest grey
+        "c":   "#666666",   # medium-dark
+        "ct":  "#888888",   # medium-light
+        "ctt": "#AAAAAA",   # light grey
+    }
     for col in fc.columns:
         fig.add_trace(go.Scatter(
             x=fc.index, y=fc[col], mode="lines",
@@ -75,30 +80,92 @@ def price_figure(contract):
             name=f"FC {col.upper()}"
         ))
 
-    recs = df
-    strikes = recs.loc[recs["Contract"] == contract, "Strike"].unique()
-    if len(strikes):
-        x0, x1 = fc.index.min(), fc.index.max()
-        for strike in strikes:
-            fig.add_trace(go.Scatter(
-                x=[x0, x1], y=[strike, strike],
-                mode="lines",
-                line=dict(color="gray", width=1, dash="dash"),
-                showlegend=False
-            ))
+    # recs = df
+    # strikes = recs.loc[recs["Contract"] == contract, "Strike"].unique()
+    # if len(strikes):
+    #     x0, x1 = fc.index.min(), fc.index.max()
+    #     for strike in strikes:
+    #         fig.add_trace(go.Scatter(
+    #             x=[x0, x1], y=[strike, strike],
+    #             mode="lines",
+    #             line=dict(color="gray", width=1, dash="dash"),
+    #             showlegend=False
+    #         ))
 
-            fig.add_annotation(
-                    x=x1, y=strike,
-                    text=f"Strike {strike:.2f}",
-                    showarrow=False,
-                    xanchor="left", 
-                    xshift =-50,
-                    yanchor="bottom",
-                    yshift=0,
-                    font=dict(color="gray", size=10),
-                )
+    #         fig.add_annotation(
+    #                 x=x1, y=strike,
+    #                 text=f"Strike {strike:.2f}",
+    #                 showarrow=False,
+    #                 xanchor="left", 
+    #                 xshift =-50,
+    #                 yanchor="bottom",
+    #                 yshift=0,
+    #                 font=dict(color="gray", size=10),
+    #             )
+
+    recs_c = df[df["Contract"] == contract]
+    x0, x1 = fc.index.min(), fc.index.max()
+
+    for _, row in recs_c.iterrows():
+        strike   = row["Strike"]
+        sign     = row["Long/Short"]
+        pc       = row["Put/Call"]
+        expiry   = row["Expiry"]
+        # derive leg description
+        leg_desc = f"{'Long' if sign>0 else 'Short'} {'Call' if pc=='C' else 'Put'}"
+
+        # dashed horizontal line
+        fig.add_trace(go.Scatter(
+            x=[x0, x1], y=[strike, strike],
+            mode="lines", showlegend=False,
+            line=dict(color="gray", width=1, dash="dash")
+        ))
+
+        txt = (
+            f"{contract} {leg_desc} @{strike:.2f}<br>"
+            f"<span style='color:red;'>Exp: {expiry}</span>"
+        )
+        # annotation at right end, just above the line
+        fig.add_annotation(
+            x=x1, y=strike,
+            text=txt,
+            showarrow=False,
+            xanchor="left",
+            xshift=-135,
+            yanchor="middle",
+            yshift=0,
+            align='right',
+            font=dict(color="gray", size=10),
+        )
+
+    today   = pd.Timestamp(dt.date.today()-dt.timedelta(days=3))
+    expiry  = pd.to_datetime(
+        df.loc[df["Contract"] == contract, "Expiry"].iloc[0]
+    ).normalize()
+
+    for date, label, color in [
+        (today,  f"Inception \n{today.date()}",  "#1E90FF"),
+        # (expiry, f"Expiry \n{expiry.date()}","red")
+    ]:
+        fig.add_shape(
+            type="line",
+            x0=date, x1=date, xref="x",
+            y0=0,    y1=1,    yref="paper",
+            line=dict(color=color, width=1, dash="dot"),
+        )
+        fig.add_annotation(
+            x=date, y=1,
+            xref="x", yref="paper",
+            text=label,
+            showarrow=False,
+            xanchor="left", yanchor="bottom",
+            yshift=-20,
+            font=dict(color=color, size=10)
+        )
 
     fig.update_layout(
+        autosize=False,     
+        height=700,      
         title=f"{contract}: Historical OHLC + VAR Price Forecasts",
          xaxis=dict(
             color="white",
@@ -132,9 +199,11 @@ def vol_figure(contract):
     fig.add_trace(go.Scatter(
         x=IV.index, y=IV[1.00],
         mode="lines", name="Forecast",
-        line=dict(color="cyan", width=2, dash="dash")
+        line=dict(color="#888888", width=2, dash="dash")
     ))
     fig.update_layout(
+        autosize=False,     
+        height=500,      
         title=f"{contract}: ATM Volatility & Forecast",
         xaxis_title="Date",
         yaxis_title="Volatility (%)",
@@ -174,6 +243,8 @@ def iv_smile_fig(contract):
     )
     fig.update_traces(line=dict(width=2))
     fig.update_layout(
+        autosize=False,     
+        height=700,      
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         # font=dict(color="white"),
