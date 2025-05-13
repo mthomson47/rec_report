@@ -33,13 +33,10 @@ def ticker_to_contract(ticker: str) -> str:
 def transform_recs(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df['Strike'] = (
-        df['STRIKE'].astype(str)
-                   .str.replace(',', '.')
-                   .astype(float)
+        df['STRIKE']
     )
 
-    contracts, positions, deltas = [], [], []
-    fair_values, best_bids, best_offers = [], [], []
+    contracts, positions = [], []
 
     for q in df['QUOTE']:
         tok = q.split()
@@ -48,26 +45,27 @@ def transform_recs(df: pd.DataFrame) -> pd.DataFrame:
         m = re.search(r'^\S+\s+\S+\s+([^(]+?)(?:\s*\(|\s+strike)', q)
         positions.append(m.group(1).strip() if m else None)
 
-        m = re.search(r'delta X ([\d,]+)', q)
-        deltas.append(float(m.group(1).replace(',', '.')) if m else None)
+        # m = re.search(r'delta X ([\d,]+)', q)
+        # deltas.append(float(m.group(1).replace(',', '.')) if m else None)
 
-        m = re.search(r'fair value ([\d,]+)', q)
-        fair_values.append(float(m.group(1).replace(',', '.')) if m else None)
+        # m = re.search(r'fair value ([\d,]+)', q)
+        # fair_values.append(float(m.group(1).replace(',', '.')) if m else None)
 
-        mb = re.search(r'best bid ([\d,]+)', q)
-        mo = re.search(r'best offer ([\d,]+)', q)
-        best_bids.append(float(mb.group(1).replace(',', '.')) if mb else None)
-        best_offers.append(float(mo.group(1).replace(',', '.')) if mo else None)
+        # mb = re.search(r'best bid ([\d,]+)', q)
+        # mo = re.search(r'best offer ([\d,]+)', q)
+        # best_bids.append(float(mb.group(1).replace(',', '.')) if mb else None)
+        # best_offers.append(float(mo.group(1).replace(',', '.')) if mo else None)
 
     result = pd.DataFrame({
+        'RECOMMENDATION_DATE': df['RECOMMENDATION_DATE'],
         'ID':        df['ID'],
         'Contract':  contracts,
         'Position':  positions,
         'Strike':    df['Strike'],
-        'Underlying':     deltas,
-        'Fair Value':fair_values,
-        'Best Bid':  best_bids,
-        'Best Offer':best_offers,
+        'Underlying':df['UNDERLYING_PRICE'].round(2),
+        'Fair Value':df['PREMIUM'].round(2),
+        'Best Bid':  df['BEST_BID'].round(2),
+        'Best Offer':df['BEST_OFFER'].round(2),
         'Put/Call':  df['PUT_CALL'],
         'Long/Short':df['LONG_SHORT'],
         'Expiry':    [pd.to_datetime(date).date() for date in df['EXPIRY']]

@@ -12,28 +12,41 @@ from utils.utils import *
 
 # TODO:
 # - get real data
-# - fix dodgy IV syndata
 # - error handling
 
-st.set_page_config(page_title="Trade Recommendations", layout="wide")
+st.set_page_config(page_title="Trade Recommendations", layout="wide", initial_sidebar_state="collapsed")
+# pd.options.display.float_format = '{:.2f}'.format
 
 # load and prepare trade recs df
 @st.cache_data
 def load_and_prepare(path):
-    raw = pd.read_csv(path, parse_dates=["RECOMMENDATION_DATE"])
+    raw = pd.read_parquet(path)
     return transform_recs(raw), raw
 
-df, raw = load_and_prepare("data/trade_recs.csv")
-df = df.reset_index(drop=True)
+rec_df, rec_raw = load_and_prepare(r"T:\Besold Temp\TradeRecs\trade_recs_all.prqt")
+# df = df.reset_index(drop=True)
+price_forecast_df_all = pd.read_parquet(r"T:\Besold Temp\PriceForecasts\price_forecasts_all.prqt")
+mkt_df = pd.read_parquet(r"T:\Besold Temp\MarketDataPriceVol\total_current.parquet")
 
 today = dt.date.today()
 selected_date = st.sidebar.date_input(
     "View data as of", 
-    value=today,
-    min_value=raw["RECOMMENDATION_DATE"].min().date(),
-    max_value=raw["RECOMMENDATION_DATE"].max().date()
+    value=rec_raw["RECOMMENDATION_DATE"].max(),    # should be today
+    min_value=rec_raw["RECOMMENDATION_DATE"].min(),
+    max_value=rec_raw["RECOMMENDATION_DATE"].max()
 )
+
 st.title("Daily Trade Recommendations - "+str(selected_date))
+df = rec_df[rec_df["RECOMMENDATION_DATE"] == selected_date]
+
+price_forecasts = price_forecast_df_all[price_forecast_df_all["valDate"] == selected_date].sort_values(by="TRADING_DATE")
+
+selected_date = pd.to_datetime(selected_date)
+historical_start = selected_date - pd.tseries.offsets.BDay(100)
+realized_end = selected_date + pd.tseries.offsets.Day(30)
+dates = mkt_df.index.get_level_values("TRADING_DATE")
+mask = (dates >= historical_start) & (dates <= realized_end)
+price_historical = np.exp(mkt_df.loc[mask]['PRICE'])
 
 # main content function
 def render_contract_subtabs(product_prefix):
@@ -47,7 +60,7 @@ def render_contract_subtabs(product_prefix):
         with sub:
             st.header(contract)
             df_c = df[df["Contract"] == contract]
-            st.dataframe(df_c.drop(columns=["Contract"]), use_container_width=True)
+            st.dataframe(df_c.drop(columns=["RECOMMENDATION_DATE","Contract"]), use_container_width=True)
 
             st.header("Price")
             st.plotly_chart(price_figure(contract), use_container_width=True)
@@ -60,28 +73,41 @@ def render_contract_subtabs(product_prefix):
             st.plotly_chart(iv_smile_fig(contract), use_container_width=True)
 
 # plotting functions
-@st.cache_data
+# @st.cache_data
 def price_figure(contract):
     ticker = contract_to_ticker(contract)
-    ohlc = pd.read_csv(f"data/{ticker}_ohlc.csv").set_index('date')
-    fc = pd.read_csv(f"data/{ticker}_fc.csv").set_index('date')
+    # ohlc = pd.read_csv(f"data/{ticker}_ohlc.csv").set_index('date')
+    # fc = pd.read_csv(f"data/{ticker}_fc.csv").set_index('date')
+
     fig = go.Figure()
-    # Candlestick
-    fig.add_trace(go.Candlestick(
-        x=ohlc.index, open=ohlc["open"], high=ohlc["high"],
-        low=ohlc["low"], close=ohlc["close"],
-        increasing=dict(line_color="green", fillcolor="green"),
-        decreasing=dict(line_color="red",   fillcolor="red"),
-        name="History"
-    ))
-    # Forecast lines
+
+    # # Candlestick
+    # fig.add_trace(go.Candlestick(
+    #     x=ohlc.index, open=ohlc["open"], high=ohlc["high"],
+    #     low=ohlc["low"], close=ohlc["close"],
+    #     increasing=dict(line_color="green", fillcolor="green"),
+    #     decreasing=dict(line_color="red",   fillcolor="red"),
+    #     name="History"
+    # ))
+    
+    # Historical price
+    hist = price_historical.loc[ticker]
+    fc = price_forecasts[price_forecasts['TCKR'] == ticker]
+    fc = fc.set_index("TRADING_DATE")
+    # hist.loc[selected_date.date()] = fc.loc[selected_date.date(), 'nc']
+
+    fig.add_trace(go.Scatter(
+            x=hist.index, y=hist,
+            mode="lines", name="Realized",
+            line=dict(color="#1E90FF", width=2)
+        ))
     colors = {
         "nc":  "#444444",   # darkest grey
         "c":   "#666666",   # medium-dark
         "ct":  "#888888",   # medium-light
         "ctt": "#AAAAAA",   # light grey
     }
-    for col in fc.columns:
+    for col in colors.keys():
         fig.add_trace(go.Scatter(
             x=fc.index, y=fc[col], mode="lines",
             line=dict(color=colors[col], width=2),
@@ -127,13 +153,13 @@ def price_figure(contract):
             font=dict(color="gray", size=12),
         )
 
-    today   = pd.Timestamp(dt.date.today()-dt.timedelta(days=3))
+    # today   = pd.Timestamp(dt.date.today())
     expiry  = pd.to_datetime(
         df.loc[df["Contract"] == contract, "Expiry"].iloc[0]
     ).normalize()
 
     for date, label, color in [
-        (today,  f"Inception: \n{today.date()}",  "#1E90FF"),
+        (selected_date.date(),  f"Inception: \n{selected_date.date()}",  "#1E90FF"),
         # (expiry, f"Expiry \n{expiry.date()}","red")
     ]:
         fig.add_shape(
@@ -155,7 +181,7 @@ def price_figure(contract):
     fig.update_layout(
         autosize=False,     
         height=700,      
-        title=f"{contract}: Historical OHLC + VAR Price Forecasts",
+        title=f"{contract}: Realized Price + VAR Forecasts",
          xaxis=dict(
             color="white",
             rangeslider=dict(visible=False)
@@ -168,7 +194,7 @@ def price_figure(contract):
     )
     return fig
 
-@st.cache_data
+# @st.cache_data
 def vol_figure(contract):
     ticker = contract_to_ticker(contract)
     hist = pd.read_csv(f'data/{ticker}_hist.csv').set_index('date')
@@ -233,7 +259,7 @@ def vol_figure(contract):
     )
     return fig
 
-@st.cache_data
+# @st.cache_data
 def iv_smile_fig(contract):
     ticker = contract_to_ticker(contract)
     # Read wide DataFrame (date index, each moneyness as a column)
@@ -286,8 +312,8 @@ tab_recs, tab_ttf, tab_hh, tab_wti, tab_brent = st.tabs([
 # Overview tab
 with tab_recs:
     st.header("Overview")
-    st.dataframe(df, use_container_width=True)
-    st.write('(*Bid/offer prices are combined for composite positions, e.g. risk reversals)')
+    st.dataframe(df.drop(['RECOMMENDATION_DATE'], axis=1), use_container_width=True)
+    # st.write('(*Bid/offer prices are combined for composite positions, e.g. risk reversals)')
     st.subheader("Trade Class Visualization")
     spacer1, content_col, spacer2 = st.columns([1, 4, 1], vertical_alignment="center")
 
