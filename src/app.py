@@ -16,16 +16,24 @@ from utils.utils import *
 # - error handling
 
 st.set_page_config(page_title="Trade Recommendations", layout="wide")
-st.title("Daily Trade Recommendations - "+str(dt.datetime.today().date()))
 
 # load and prepare trade recs df
 @st.cache_data
 def load_and_prepare(path):
     raw = pd.read_csv(path, parse_dates=["RECOMMENDATION_DATE"])
-    return transform_recs(raw)
+    return transform_recs(raw), raw
 
-df = load_and_prepare("data/trade_recs.csv")
+df, raw = load_and_prepare("data/trade_recs.csv")
 df = df.reset_index(drop=True)
+
+today = dt.date.today()
+selected_date = st.sidebar.date_input(
+    "View data as of", 
+    value=today,
+    min_value=raw["RECOMMENDATION_DATE"].min().date(),
+    max_value=raw["RECOMMENDATION_DATE"].max().date()
+)
+st.title("Daily Trade Recommendations - "+str(selected_date))
 
 # main content function
 def render_contract_subtabs(product_prefix):
