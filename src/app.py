@@ -80,28 +80,7 @@ def price_figure(contract):
             name=f"FC {col.upper()}"
         ))
 
-    # recs = df
-    # strikes = recs.loc[recs["Contract"] == contract, "Strike"].unique()
-    # if len(strikes):
-    #     x0, x1 = fc.index.min(), fc.index.max()
-    #     for strike in strikes:
-    #         fig.add_trace(go.Scatter(
-    #             x=[x0, x1], y=[strike, strike],
-    #             mode="lines",
-    #             line=dict(color="gray", width=1, dash="dash"),
-    #             showlegend=False
-    #         ))
-
-    #         fig.add_annotation(
-    #                 x=x1, y=strike,
-    #                 text=f"Strike {strike:.2f}",
-    #                 showarrow=False,
-    #                 xanchor="left", 
-    #                 xshift =-50,
-    #                 yanchor="bottom",
-    #                 yshift=0,
-    #                 font=dict(color="gray", size=10),
-    #             )
+    
 
     recs_c = df[df["Contract"] == contract]
     x0, x1 = fc.index.min(), fc.index.max()
@@ -113,7 +92,7 @@ def price_figure(contract):
         expiry   = row["Expiry"]
         # derive leg description
         leg_desc = f"{'Long' if sign>0 else 'Short'} {'Call' if pc=='C' else 'Put'}"
-        bullbear = f'{'green' if leg_desc=='Long Call' or leg_desc=='Short Put' else 'red'}'
+        bullbear = f"{'green' if leg_desc=='Long Call' or leg_desc=='Short Put' else 'red'}"
 
         # dashed horizontal line
         fig.add_trace(go.Scatter(
