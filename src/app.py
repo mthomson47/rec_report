@@ -113,6 +113,7 @@ def price_figure(contract):
         expiry   = row["Expiry"]
         # derive leg description
         leg_desc = f"{'Long' if sign>0 else 'Short'} {'Call' if pc=='C' else 'Put'}"
+        bullbear = f'{'green' if leg_desc=='Long Call' or leg_desc=='Short Put' else 'red'}'
 
         # dashed horizontal line
         fig.add_trace(go.Scatter(
@@ -122,20 +123,21 @@ def price_figure(contract):
         ))
 
         txt = (
-            f"{contract} {leg_desc} @{strike:.2f}<br>"
-            f"<span style='color:red;'>Exp: {expiry}</span>"
+            f"<span style='color:{bullbear};'>{contract} {leg_desc} @{strike:.2f}<br></span>"
+            f"Exp: {expiry}"
         )
         # annotation at right end, just above the line
         fig.add_annotation(
-            x=x1, y=strike,
+            x=1.0, y=strike,
+            xref="paper", yref="y",
             text=txt,
             showarrow=False,
             xanchor="left",
-            xshift=-135,
+            xshift=-150,
             yanchor="middle",
             yshift=0,
             align='right',
-            font=dict(color="gray", size=10),
+            font=dict(color="gray", size=12),
         )
 
     today   = pd.Timestamp(dt.date.today()-dt.timedelta(days=3))
@@ -144,7 +146,7 @@ def price_figure(contract):
     ).normalize()
 
     for date, label, color in [
-        (today,  f"Inception \n{today.date()}",  "#1E90FF"),
+        (today,  f"Inception: \n{today.date()}",  "#1E90FF"),
         # (expiry, f"Expiry \n{expiry.date()}","red")
     ]:
         fig.add_shape(
@@ -160,7 +162,7 @@ def price_figure(contract):
             showarrow=False,
             xanchor="left", yanchor="bottom",
             yshift=-20,
-            font=dict(color=color, size=10)
+            font=dict(color=color, size=12)
         )
 
     fig.update_layout(
@@ -187,14 +189,43 @@ def vol_figure(contract):
     
     new_cols = np.round(IV.columns.astype(float), 2)
     IV.columns = new_cols
+
+    baseline = min(hist['vol'].min(), IV[1.00].min())
+    hist_rel = hist["vol"] - baseline
     fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=hist.index, 
+        y=[baseline]*len(hist),
+        mode='lines',
+        line=dict(color='rgba(0,0,0,0)'),  # fully transparent
+        showlegend=False
+    ))
+
+    N = 20
+    for i in range(1, N+1):
+        frac    = i / N
+        opacity = frac * 0.3  # max 30% opacity
+        # Build absolute y-values: baseline + frac*(hist-baseline)
+        y_i = baseline + hist_rel * frac
+        fig.add_trace(go.Scatter(
+            x=hist.index,
+            y=y_i,
+            mode='none',
+            fill='tonexty',
+            fillcolor=f'rgba(255,165,0,{opacity})',
+            showlegend=False
+        ))
 
     # Historical vol
     fig.add_trace(go.Scatter(
         x=hist.index, y=hist["vol"],
         mode="lines", name="History",
-        line=dict(color="orange", width=2)
+        line=dict(color="orange", width=2),
+        # fill="tonexty",
+        # fillcolor="rgba(255,165,0,0.3)" 
     ))
+
     # Single forecast
     fig.add_trace(go.Scatter(
         x=IV.index, y=IV[1.00],
